@@ -1,0 +1,7 @@
+[
+    {
+        "key": "alt+w",
+        "command": "editor.emmet.action.wrapWithAbbreviation",
+        "when": "editorTextFocus && !editorReadonly"
+    }
+]
