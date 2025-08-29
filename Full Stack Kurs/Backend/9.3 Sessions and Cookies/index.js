@@ -15,17 +15,21 @@ env.config();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
+// Session Konfiguration
+// Erforderlich für Passport Authentication
 app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: true,
+  secret: process.env.SESSION_SECRET,  // Schlüssel zum Verschlüsseln der Session
+  resave: false,                       // Session nicht bei jeder Anfrage speichern
+  saveUninitialized: true,             // Auch leere Sessions speichern
   cookie: {
-    maxAge: 1000 * 60 * 60 * 24, //Cookie hält 1 Tag lang
+    maxAge: 1000 * 60 * 60 * 24,      // Cookie hält 1 Tag lang (in Millisekunden)
   }
 }));
 
-app.use(passport.initialize());
-app.use(passport.session());
+// Passport Middleware initialisieren
+// Muss nach session() aber vor den Routes stehen
+app.use(passport.initialize());  // Passport initialisieren
+app.use(passport.session());     // Passport Sessions aktivieren
 
 const db = new pg.Client({
   user: process.env.PG_USER,
@@ -93,46 +97,59 @@ app.post("/register", async (req, res) => {
   }
 });
 
+// Login Route mit Passport Authentication
+// Verwendet die "local" Strategy (Username/Password)
+// Bei erfolgreichem Login: Weiterleitung zu "/secrets"
+// Bei fehlgeschlagenem Login: Weiterleitung zurück zu "/login"
 app.post("/login", passport.authenticate("local", {
   successRedirect: "/secrets",
   failureRedirect: "/login",
 }));
 
+// Passport Local Strategy Konfiguration
+// Wird automatisch von passport.authenticate("local") aufgerufen
+// Parameter: username, password (aus dem Login-Formular), cb (callback)
 passport.use(new Strategy(async function verify(username, password, cb) {
   console.log(username);
 
   try {
+    // 1. User in der Datenbank suchen
     const result = await db.query("SELECT * FROM users WHERE email = $1", [
       username,
     ]);
     if (result.rows.length > 0) {
       const user = result.rows[0];
       const storedHashedPassword = user.password;
+      
+      // 2. Passwort mit bcrypt vergleichen
       bcrypt.compare(password, storedHashedPassword, (err, result) => {
         if (err) {
-          return cb(err)
+          return cb(err)  // Fehler beim Passwort-Vergleich
         } else {
           if (result) {
-            return cb(null, user);
+            return cb(null, user);  // Login erfolgreich, User-Objekt zurückgeben
           } else {
-            return cb(null, false);
+            return cb(null, false); // Falsches Passwort
           }
         }
       });
     } else {
-      return cb("User not found");
+      return cb("User not found");  // User existiert nicht
     }
   } catch (err) {
-    return cb(err);
+    return cb(err);  // Datenbankfehler
   }
 }))
 
+// Passport Session Management
+// serializeUser: Bestimmt, welche User-Daten in der Session gespeichert werden
 passport.serializeUser((user, cb) => {
-  cb(null, user);
+  cb(null, user);  // Komplettes User-Objekt speichern
 })
 
+// deserializeUser: Lädt User-Daten aus der Session
 passport.deserializeUser((user, cb) => {
-  cb(null, user);
+  cb(null, user);  // User-Objekt aus Session laden
 })
 
 app.listen(port, () => {
